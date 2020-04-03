@@ -171,3 +171,7 @@ Example:
   python lynda-dl.py -k cookies.txt COURSE_URL
 
 </code></pre>
+
+# Disclaimer
+
+I will not be responsible for how you use Lynda-DL Although the downloaded files are not the contents themselves, accessing or storing these files might still be illegal in some parts of the world. So, take great care when using this tool and make sure that it is legal. 
