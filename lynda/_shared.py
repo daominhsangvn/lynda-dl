@@ -80,6 +80,12 @@ class LyndaCourse(object):
         return self._title
 
     @property
+    def tags(self):
+        if not self._tags:
+            self._fetch_course()
+        return self._tags
+
+    @property
     def assets(self):
         if not self._assets:
             self._process_assets()
@@ -104,7 +110,6 @@ class LyndaCourse(object):
     @property
     def short_description(self):
         return self._short_description
-    
 
     def get_chapters(self):
         if not self._chapters:

@@ -62,6 +62,7 @@ class InternLyndaCourse(LyndaCourse, Lynda):
             self._short_description =       self._info['short_description']
             self._assets_count      =       self._info['assets_count']
             self._chapters          =       [InternLyndaChapter(z) for z in self._info['chapters']]
+            self._tags              =       self._info['tags']
             sys.stdout.write(fc + sd + "[" + fm + sb + "*" + fc + sd + "] : " + fg + sb + "Trying to logout now...\n")
             if not self._cookies:
                 self._logout()

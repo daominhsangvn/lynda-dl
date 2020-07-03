@@ -257,7 +257,7 @@ class Lynda(ProgressBar):
         _lynda['assets'] = self._extract_assets(course_id)
         _lynda['assets_count'] = len(_lynda['assets'])
         _lynda['chapters'] = []
-
+        _lynda['tags'] = list(map(lambda t: t.get('Name'), filter(lambda t: t.get('Type') == 4, course_json.get('Tags'))))
 
         if course:
             _lynda['total_chapters'] = len(course)
