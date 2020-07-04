@@ -6,6 +6,7 @@ import sys
 import time
 import lynda
 import argparse
+import shutil
 
 from pprint import pprint
 from lynda import __version__
@@ -25,6 +26,7 @@ class Lynda(ProgressBar):
         self.password = password
         self.cookies = cookies
         self.organization = organization
+
         super(Lynda, self).__init__()
 
     def course_list_down(self):
@@ -191,7 +193,18 @@ class Lynda(ProgressBar):
         if subtitle:
             self.download_subtitles(subtitle=subtitle, filepath=filepath)
 
-    def course_download(self, path='', quality='', caption_only=False, skip_captions=False):
+    def is_downloaded(self, downloaded_history_file_path, course_id):
+        downloaded_history_file = open(downloaded_history_file_path, "r") 
+        downloaded_list = downloaded_history_file.readlines()
+        downloaded_history_file.close()
+        return str(course_id) + '\n' in downloaded_list
+
+    def update_downloaded(self, downloaded_history_file_path, course_id):
+        downloaded_history_file = open(downloaded_history_file_path, "a") 
+        downloaded_history_file.write(str(course_id) + '\n')
+        downloaded_history_file.close()
+
+    def course_download(self, path='', quality='', caption_only=False, skip_captions=False, target_folder = ''):
         if self.cookies:
             sys.stdout.write(fc + sd + "[" + fm + sb + "*" + fc + sd +
                              "] : " + fg + sb + "Trying to login using cookies ...\n")
@@ -205,7 +218,17 @@ class Lynda(ProgressBar):
         course = lynda.course(url=self.url, username=self.username, password=self.password,
                               organization=self.organization, cookies=self.cookies)
         course_id = course.id
+
+        if target_folder != '':
+	        downloaded_file_path = "{target_folder}/downloaded.txt".format(target_folder=target_folder)
+	        if self.is_downloaded(downloaded_file_path, course_id):
+	        	print("Course has been downloaded already! Skip")
+	        	return
+
         course_name = course.title
+        course_name = course_name.replace(":", "_")
+        course_name = course_name.replace("|", "-")
+        course_name = course_name.replace("/", "-")
         chapters = course.get_chapters()
         total_lectures = course.lectures
         total_chapters = course.chapters
@@ -217,6 +240,16 @@ class Lynda(ProgressBar):
                          "] : " + fg + sd + "Chapter(s) (%s).\n" % (total_chapters))
         sys.stdout.write(fc + sd + "[" + fm + sb + "*" + fc + sd +
                          "] : " + fg + sd + "Lecture(s) (%s).\n" % (total_lectures))
+
+        tags_str = ""
+        for tag in course.tags:
+        	tag = tag.replace("/", "-")
+        	tags_str = tags_str + "("+tag+")"
+        if len(course.tags) > 0:
+        	course_name = course_name + " -- Skills" + tags_str
+
+        course_name = "(" + str(course_id) + ") " + course_name
+
         if path:
             if '~' in path:
                 path = os.path.expanduser(path)
@@ -227,12 +260,12 @@ class Lynda(ProgressBar):
             course_path = "%s\\%s" % (
                 path, course_name) if os.name == 'nt' else "%s/%s" % (path, course_name)
 
-        tags_str = ""
-        for tag in course.tags:
-        	tag = tag.replace("/", "-")
-        	tags_str = tags_str + "("+tag+")"
-        if len(course.tags) > 0:
-        	course_path = course_path + " -- Skills" + tags_str
+        if target_folder != '':
+        	target_path = target_folder + '/' + course_name
+
+        # Clean up
+        if os.path.exists(course_path):
+            shutil.rmtree(course_path)
 
         course.course_description(filepath=course_path)
         for chapter in chapters:
@@ -274,6 +307,14 @@ class Lynda(ProgressBar):
         if assets and len(assets) > 0:
             for asset in assets:
                 self.download_assets(assets=asset, filepath=course_path)
+
+        if target_folder != '':
+	        # move files to target folder
+	        if os.path.exists(target_path):
+	            shutil.rmtree(target_path)
+	        print("* Moving files from " + course_path + " to " + target_folder)
+	        shutil.move(course_path, target_folder)
+	        self.update_downloaded(downloaded_file_path, course_id)
 
 
 def main():
@@ -324,6 +365,11 @@ def main():
         type=str,
         help="Download to specific directory.", metavar='')
     advance.add_argument(
+        '-t', '--target-folder',
+        dest='target_folder',
+        type=str,
+        help="Move to specific directory.", metavar='')
+    advance.add_argument(
         '-q', '--quality',
         dest='quality',
         type=int,
@@ -347,6 +393,15 @@ def main():
         help="Download course but skip captions/subtitle.")
 
     options = parser.parse_args()
+
+    if bool(options.target_folder):
+    	downloaded_history_file_path = "{target_folder}/downloaded.txt".format(target_folder=options.target_folder)
+    	os.makedirs(options.target_folder, exist_ok=True)
+    	if not os.path.exists(downloaded_history_file_path):
+	        downloaded_history_file = open(downloaded_history_file_path, "w") 
+	        downloaded_history_file.write("")
+	        downloaded_history_file.close()
+
     if os.path.isfile(options.course):
         f_in = open(options.course)
         courses = [line for line in (l.strip() for l in f_in) if line]
@@ -367,13 +422,13 @@ def main():
                 if not options.info:
                     if options.caption_only and not options.skip_captions:
                         lynda.course_download(
-                            caption_only=options.caption_only, path=options.output)
+                            caption_only=options.caption_only, path=options.output, target_folder=options.target_folder)
                     elif not options.caption_only and options.skip_captions:
                         lynda.course_download(
-                            skip_captions=options.skip_captions, path=options.output, quality=options.quality)
+                            skip_captions=options.skip_captions, path=options.output, quality=options.quality, target_folder=options.target_folder)
                     else:
                         lynda.course_download(
-                            path=options.output, quality=options.quality)
+                            path=options.output, quality=options.quality, target_folder=options.target_folder)
 
             if not options.cookies:
                 if not options.username and not options.password:
@@ -399,13 +454,13 @@ def main():
                     if not options.info:
                         if options.caption_only and not options.skip_captions:
                             lynda.course_download(
-                                caption_only=options.caption_only, path=options.output)
+                                caption_only=options.caption_only, path=options.output, target_folder=options.target_folder)
                         elif not options.caption_only and options.skip_captions:
                             lynda.course_download(
-                                skip_captions=options.skip_captions, path=options.output, quality=options.quality)
+                                skip_captions=options.skip_captions, path=options.output, quality=options.quality, target_folder=options.target_folder)
                         else:
                             lynda.course_download(
-                                path=options.output, quality=options.quality)
+                                path=options.output, quality=options.quality, target_folder=options.target_folder)
 
                 elif options.username and options.password:
                     lynda = Lynda(url=course, username=options.username,
@@ -416,13 +471,13 @@ def main():
                     if not options.info:
                         if options.caption_only and not options.skip_captions:
                             lynda.course_download(
-                                caption_only=options.caption_only, path=options.output)
+                                caption_only=options.caption_only, path=options.output, target_folder=options.target_folder)
                         elif not options.caption_only and options.skip_captions:
                             lynda.course_download(
-                                skip_captions=options.skip_captions, path=options.output, quality=options.quality)
+                                skip_captions=options.skip_captions, path=options.output, quality=options.quality, target_folder=options.target_folder)
                         else:
                             lynda.course_download(
-                                path=options.output, quality=options.quality)
+                                path=options.output, quality=options.quality, target_folder=options.target_folder)
 
     if not os.path.isfile(options.course):
 
@@ -438,13 +493,13 @@ def main():
             if not options.info:
                 if options.caption_only and not options.skip_captions:
                     lynda.course_download(
-                        caption_only=options.caption_only, path=options.output)
+                        caption_only=options.caption_only, path=options.output, target_folder=options.target_folder)
                 elif not options.caption_only and options.skip_captions:
                     lynda.course_download(
-                        skip_captions=options.skip_captions, path=options.output, quality=options.quality)
+                        skip_captions=options.skip_captions, path=options.output, quality=options.quality, target_folder=options.target_folder)
                 else:
                     lynda.course_download(
-                        path=options.output, quality=options.quality)
+                        path=options.output, quality=options.quality, target_folder=options.target_folder)
 
         if not options.cookies:
             if not options.username and not options.password:
@@ -470,13 +525,13 @@ def main():
                 if not options.info:
                     if options.caption_only and not options.skip_captions:
                         lynda.course_download(
-                            caption_only=options.caption_only, path=options.output)
+                            caption_only=options.caption_only, path=options.output, target_folder=options.target_folder)
                     elif not options.caption_only and options.skip_captions:
                         lynda.course_download(
-                            skip_captions=options.skip_captions, path=options.output, quality=options.quality)
+                            skip_captions=options.skip_captions, path=options.output, quality=options.quality, target_folder=options.target_folder)
                     else:
                         lynda.course_download(
-                            path=options.output, quality=options.quality)
+                            path=options.output, quality=options.quality, target_folder=options.target_folder)
 
             elif options.username and options.password:
                 lynda = Lynda(url=options.course, username=options.username,
@@ -487,13 +542,13 @@ def main():
                 if not options.info:
                     if options.caption_only and not options.skip_captions:
                         lynda.course_download(
-                            caption_only=options.caption_only, path=options.output)
+                            caption_only=options.caption_only, path=options.output, target_folder=options.target_folder)
                     elif not options.caption_only and options.skip_captions:
                         lynda.course_download(
-                            skip_captions=options.skip_captions, path=options.output, quality=options.quality)
+                            skip_captions=options.skip_captions, path=options.output, quality=options.quality, target_folder=options.target_folder)
                     else:
                         lynda.course_download(
-                            path=options.output, quality=options.quality)
+                            path=options.output, quality=options.quality, target_folder=options.target_folder)
 
 if __name__ == '__main__':
     try:
